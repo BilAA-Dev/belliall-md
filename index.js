@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = require('@whiskeysockets/baileys');
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
@@ -9,11 +10,11 @@ const moment = require('moment');
 const { exec } = require('child_process');
 const path = require('path');
 
-// === KONFIGURASI BELLIALL ===
-const OWNER_NUMBER = '6282298323211'; // Ganti dengan nomor lo
-const BOT_NAME = 'BELLIALL-MD';
-const PREFIX = '.';
-const SESSION_ID = process.env.SESSION_ID || ''; // Auto dari env
+// === KONFIGURASI BELLIALL (DARI .ENV) ===
+const OWNER_NUMBER = process.env.OWNER_NUMBER || '6282298323211';
+const BOT_NAME = process.env.BOT_NAME || 'BELLIALL-MD';
+const PREFIX = process.env.PREFIX || '.';
+const SESSION_ID = process.env.SESSION_ID || '';
 
 // === VARIABLE GLOBAL ===
 let isPublic = true;
@@ -27,7 +28,7 @@ async function startBot() {
         logger: pino({ level: 'silent' }),
         auth: state,
         printQRInTerminal: true,
-        browser: ['BELLIALL-MD', 'Chrome', '1.0.0']
+        browser: ['BELLIALL-MD', 'Chrome', '2.0.0']
     });
 
     // === EVENT CONNECTION ===
@@ -71,9 +72,8 @@ async function startBot() {
         const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
         const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage || null;
 
-        // === FILTER PERINTAH ===
+        // === AUTO-REPLY (tanpa prefix) ===
         if (!text.startsWith(PREFIX)) {
-            // Auto-reply kata kunci (fitur tambahan)
             if (text.toLowerCase().includes('assalamualaikum')) {
                 await socket.sendMessage(sender, { text: 'Wa\'alaikumsalam warahmatullahi wabarakatuh 🌙' });
             }
