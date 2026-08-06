@@ -6,16 +6,16 @@ const fs = require('fs-extra');
 const ytdl = require('ytdl-core');
 const path = require('path');
 
-// ========== KONFIGURASI ==========
-const OWNER_NAME = process.env.OWNER_NAME || 'HELL';
-const OWNER_NUMBER = process.env.OWNER_NUMBER || '6282298323211';
-const BOT_NAME = process.env.BOT_NAME || 'BELLIALL-MD';
-const PREFIX = process.env.PREFIX || '.';
-const PHONE_NUMBER = process.env.PHONE_NUMBER || '6282298323211';
+// === KONFIGURASI ===
+const OWNER_NAME = 'HELL';
+const OWNER_NUMBER = '6282298323211';
+const BOT_NAME = 'BELLIALL-MD';
+const PREFIX = '.';
 
+// === FITUR GLOBAL ===
 let welcomeEnabled = false;
 
-// ========== FUNGSI PAIRING ==========
+// === MULAI BOT ===
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
     
@@ -25,19 +25,15 @@ async function startBot() {
         browser: ['BELLIALL-MD', 'Chrome', '1.0.0']
     });
 
+    // ===== QR CODE GENERATOR =====
     socket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
+        // INI DIA BOS! QR NYA DIUBAH JADI LINK
         if (qr) {
-            console.log('📱 Mencoba pairing code...');
-            try {
-                const code = await socket.requestPairingCode(PHONE_NUMBER);
-                console.log(`🔐 KODE PAIRING: ${code}`);
-                console.log(`📲 Buka WhatsApp -> Perangkat Tertaut -> Tautkan Perangkat -> Masukkan kode: ${code}`);
-            } catch (e) {
-                console.log('❌ Pairing gagal, scan QR di browser:');
-                console.log(`👉 https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`);
-            }
+            console.log('\n📱 SCAN QR INI DI HP:');
+            console.log(`👉 https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`);
+            console.log('📌 Copy link di atas, buka di browser HP, scan QR dari layar.\n');
         }
 
         if (connection === 'open') {
@@ -53,7 +49,7 @@ async function startBot() {
 
     socket.ev.on('creds.update', saveCreds);
 
-    // ========== EVENT PESAN MASUK (FULL FITUR) ==========
+    // ===== PESAN MASUK (FULL FITUR) =====
     socket.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
         if (!msg.message || msg.key.fromMe) return;
@@ -121,7 +117,7 @@ async function startBot() {
         // ===== STIKER =====
         else if (command === 'stiker') {
             if (!quoted || !quoted.imageMessage) {
-                return socket.sendMessage(sender, { text: '❌ Balas gambar dengan perintah .stiker' });
+                return socket.sendMessage(sender, { text: '❌ Balas gambar dengan .stiker' });
             }
             try {
                 const media = await downloadMediaMessage(quoted, 'buffer', {}, { reuploadRequest: socket.updateMediaMessage });
@@ -134,7 +130,7 @@ async function startBot() {
         // ===== STIKER GIF =====
         else if (command === 'stikergif') {
             if (!quoted || !quoted.videoMessage) {
-                return socket.sendMessage(sender, { text: '❌ Balas video dengan perintah .stikergif' });
+                return socket.sendMessage(sender, { text: '❌ Balas video dengan .stikergif' });
             }
             try {
                 const media = await downloadMediaMessage(quoted, 'buffer', {}, { reuploadRequest: socket.updateMediaMessage });
@@ -148,7 +144,7 @@ async function startBot() {
         else if (command === 'ytmp3') {
             if (!fullArgs) return socket.sendMessage(sender, { text: '❌ Masukkan URL YouTube' });
             try {
-                await socket.sendMessage(sender, { text: '⏳ Mengunduh audio...' });
+                await socket.sendMessage(sender, { text: '⏳ Download audio...' });
                 const info = await ytdl.getInfo(fullArgs);
                 const title = info.videoDetails.title;
                 const audioStream = ytdl(fullArgs, { quality: 'highestaudio', filter: 'audioonly' });
@@ -167,7 +163,7 @@ async function startBot() {
         else if (command === 'ytmp4') {
             if (!fullArgs) return socket.sendMessage(sender, { text: '❌ Masukkan URL YouTube' });
             try {
-                await socket.sendMessage(sender, { text: '⏳ Mengunduh video...' });
+                await socket.sendMessage(sender, { text: '⏳ Download video...' });
                 const info = await ytdl.getInfo(fullArgs);
                 const title = info.videoDetails.title;
                 const videoStream = ytdl(fullArgs, { quality: 'lowest' });
@@ -205,16 +201,15 @@ async function startBot() {
             }
         }
 
-        // ===== DEFAULT =====
         else {
             await socket.sendMessage(sender, { text: `❌ Perintah "${command}" tidak dikenal.\nKetik .menu` });
         }
     });
 
-    console.log(`🔥 ${BOT_NAME} by ${OWNER_NAME} siap digunakan!`);
+    console.log(`🔥 ${BOT_NAME} by ${OWNER_NAME} siap!`);
 }
 
 startBot().catch(err => {
-    console.error('❌ Error fatal:', err);
+    console.error('❌ Error:', err);
     process.exit(1);
 });
