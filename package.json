@@ -1,7 +1,7 @@
 {
   "name": "belliall-md",
   "version": "3.0.0",
-  "description": "Bot WhatsApp BELLIALL by HELL",
+  "description": "Bot WhatsApp BELLIALL by HELL - Full Fitur",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -9,12 +9,13 @@
   "dependencies": {
     "@whiskeysockets/baileys": "6.7.18",
     "pino": "^8.0.0",
+    "qrcode-terminal": "^0.12.0",
+    "dotenv": "^16.0.3",
     "node-fetch": "^3.3.1",
     "axios": "^1.6.0",
     "fluent-ffmpeg": "^2.1.2",
     "ytdl-core": "^4.11.5",
     "moment": "^2.29.4",
-    "fs-extra": "^11.1.1",
-    "dotenv": "^16.0.3"
+    "fs-extra": "^11.1.1"
   }
 }
