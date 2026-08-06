@@ -8,18 +8,18 @@ const axios = require('axios');
 const ytdl = require('ytdl-core');
 const moment = require('moment');
 const path = require('path');
-const qrTerminal = require('qrcode-terminal');
 
 // === KONFIGURASI BELLIALL (DARI .ENV) ===
 const OWNER_NAME = process.env.OWNER_NAME || 'HELL';
 const OWNER_NUMBER = process.env.OWNER_NUMBER || '6282298323211';
 const BOT_NAME = process.env.BOT_NAME || 'BELLIALL-MD';
 const PREFIX = process.env.PREFIX || '.';
+const PHONE_NUMBER = process.env.PHONE_NUMBER || '6282298323211';
 
 // === VARIABLE GLOBAL ===
 let isPublic = true;
 let welcomeEnabled = false;
-let qrDisplayed = false;
+let pairingStarted = false;
 
 // === FUNGSI UTAMA ===
 async function startBot() {
@@ -31,28 +31,40 @@ async function startBot() {
         browser: ['BELLIALL-MD', 'Chrome', '2.0.0']
     });
 
-    // === QR CODE ===
+    // === QR CODE + PAIRING ===
     socket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         
-        if (qr && !qrDisplayed) {
-            qrDisplayed = true;
-            console.log('\n📱 SCAN QR CODE INI DENGAN WHATSAPP:\n');
-            qrTerminal.generate(qr, { small: true });
-            console.log('\n⚠️ Atau scan lewat: Menu WhatsApp → Perangkat Tertaut → Tautkan Perangkat\n');
+        // TAMPILIN QR LINK
+        if (qr) {
+            console.log('\n📱 SCAN QR CODE DENGAN WHATSAPP:');
+            console.log(`🔗 LINK QR: https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`);
+            console.log('\n📲 Atau buka link di browser, lalu scan QR dari layar HP.\n');
+            
+            // Pairing code sebagai backup
+            if (!pairingStarted) {
+                pairingStarted = true;
+                try {
+                    const code = await socket.requestPairingCode(PHONE_NUMBER);
+                    console.log(`🔐 ATAU PAKAI PAIRING CODE: ${code}`);
+                    console.log(`📲 Buka WhatsApp → Perangkat Tertaut → Tautkan Perangkat → Masukkan kode: ${code}\n`);
+                } catch (e) {
+                    console.log('⚠️ Pairing code gagal, scan QR aja.\n');
+                }
+            }
         }
 
         if (connection === 'open') {
             console.log(`✅ ${BOT_NAME} aktif siap membantu!`);
-            qrDisplayed = false;
+            pairingStarted = false;
         } else if (connection === 'close') {
-            qrDisplayed = false;
+            pairingStarted = false;
             const shouldReconnect = (lastDisconnect.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
             if (shouldReconnect) {
                 console.log('🔄 Reconnecting...');
                 startBot();
             } else {
-                console.log('❌ Logout, scan ulang QR!');
+                console.log('❌ Logout, scan ulang!');
             }
         }
     });
