@@ -7,16 +7,16 @@ const ytdl = require('ytdl-core');
 const path = require('path');
 
 // === KONFIGURASI ===
-const OWNER_NAME = process.env.OWNER_NAME || 'HELL';
-const OWNER_NUMBER = process.env.OWNER_NUMBER || '6282298323211';
-const BOT_NAME = process.env.BOT_NAME || 'BELLIALL-MD';
-const PREFIX = process.env.PREFIX || '.';
-const PHONE_NUMBER = process.env.PHONE_NUMBER || '6282298323211';
+const OWNER_NAME = 'HELL';
+const OWNER_NUMBER = '6282298323211';
+const BOT_NAME = 'BELLIALL-MD';
+const PREFIX = '.';
 
 let welcomeEnabled = false;
-let pairingStarted = false;
-let reconnectDelay = 5000;
-const MAX_DELAY = 300000;
+let qrDisplayed = false;
+
+// === FUNGSI DELAY ===
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // === START BOT ===
 async function startBot() {
@@ -25,30 +25,34 @@ async function startBot() {
     const socket = makeWASocket({
         logger: pino({ level: 'silent' }),
         auth: state,
-        browser: ['Windows', 'Chrome', '109.0.0.0']
+        browser: ['Ubuntu', 'Chrome', '120.0.0.0'], // GANTI BROWSER
+        version: [2, 3000, 1015901307], // VERSI PALING STABIL
+        connectTimeoutMs: 60000, // TIMEOUT 60 DETIK
+        defaultQueryTimeoutMs: 60000
     });
 
     socket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
-        if (qr) {
-            console.log('📱 SCAN QR:');
+        // === QR CODE (PASTI MUNCUL) ===
+        if (qr && !qrDisplayed) {
+            qrDisplayed = true;
+            console.log('\n📱 SCAN QR INI:');
             console.log(`👉 https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`);
+            console.log('\n📌 COPY LINK DI ATAS, BUKA DI BROWSER HP, SCAN QR DARI LAYAR.\n');
         }
 
         if (connection === 'open') {
             console.log(`✅ ${BOT_NAME} AKTIF!`);
-            pairingStarted = false;
-            reconnectDelay = 5000;
+            qrDisplayed = false;
         } else if (connection === 'close') {
+            qrDisplayed = false;
             const statusCode = (lastDisconnect.error instanceof Boom)?.output?.statusCode;
             
-            if (statusCode === 405) {
-                console.log(`⏳ Kena limit, tunggu ${reconnectDelay/1000} detik...`);
-                await new Promise(resolve => setTimeout(resolve, reconnectDelay));
-                reconnectDelay = Math.min(reconnectDelay * 2, MAX_DELAY);
-            } else {
-                reconnectDelay = 5000;
+            // KALO KENA LIMIT, TUNGGU 30 DETIK
+            if (statusCode === 405 || statusCode === 403) {
+                console.log('⏳ Kena limit, tunggu 30 detik...');
+                await delay(30000);
             }
             
             if (statusCode !== DisconnectReason.loggedOut) {
@@ -56,20 +60,6 @@ async function startBot() {
                 startBot();
             } else {
                 console.log('❌ Logout, hapus auth_info!');
-            }
-        } else if (connection === 'connecting') {
-            if (!pairingStarted) {
-                pairingStarted = true;
-                console.log(`📱 Minta pairing untuk: ${PHONE_NUMBER}`);
-                try {
-                    const code = await socket.requestPairingCode(PHONE_NUMBER);
-                    console.log(`\n🔐 KODE PAIRING: ${code}`);
-                    console.log(`📲 Buka WhatsApp → Perangkat Tertaut → Tautkan Perangkat → Masukkan kode: ${code}\n`);
-                } catch (e) {
-                    console.log(`❌ Gagal: ${e.message}`);
-                    pairingStarted = false;
-                    setTimeout(startBot, 15000);
-                }
             }
         }
     });
