@@ -7,20 +7,19 @@ const fetch = require('node-fetch');
 const axios = require('axios');
 const ytdl = require('ytdl-core');
 const moment = require('moment');
-const { exec } = require('child_process');
 const path = require('path');
+const qrTerminal = require('qrcode-terminal');
 
 // === KONFIGURASI BELLIALL (DARI .ENV) ===
 const OWNER_NAME = process.env.OWNER_NAME || 'HELL';
 const OWNER_NUMBER = process.env.OWNER_NUMBER || '6282298323211';
 const BOT_NAME = process.env.BOT_NAME || 'BELLIALL-MD';
 const PREFIX = process.env.PREFIX || '.';
-const PHONE_NUMBER = process.env.PHONE_NUMBER || '6282298323211';
 
 // === VARIABLE GLOBAL ===
 let isPublic = true;
 let welcomeEnabled = false;
-let pairingStarted = false;
+let qrDisplayed = false;
 
 // === FUNGSI UTAMA ===
 async function startBot() {
@@ -32,36 +31,28 @@ async function startBot() {
         browser: ['BELLIALL-MD', 'Chrome', '2.0.0']
     });
 
-    // === PAIRING CODE OTOMATIS ===
+    // === QR CODE ===
     socket.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect } = update;
+        const { connection, lastDisconnect, qr } = update;
         
+        if (qr && !qrDisplayed) {
+            qrDisplayed = true;
+            console.log('\n📱 SCAN QR CODE INI DENGAN WHATSAPP:\n');
+            qrTerminal.generate(qr, { small: true });
+            console.log('\n⚠️ Atau scan lewat: Menu WhatsApp → Perangkat Tertaut → Tautkan Perangkat\n');
+        }
+
         if (connection === 'open') {
             console.log(`✅ ${BOT_NAME} aktif siap membantu!`);
+            qrDisplayed = false;
         } else if (connection === 'close') {
+            qrDisplayed = false;
             const shouldReconnect = (lastDisconnect.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
             if (shouldReconnect) {
                 console.log('🔄 Reconnecting...');
                 startBot();
             } else {
-                console.log('❌ Logout, pairing ulang!');
-            }
-        } else if (connection === 'connecting') {
-            if (!pairingStarted) {
-                pairingStarted = true;
-                console.log('⏳ Menghubungkan ke WhatsApp...');
-                console.log(`📱 Menggunakan nomor: ${PHONE_NUMBER}`);
-                
-                try {
-                    const code = await socket.requestPairingCode(PHONE_NUMBER);
-                    console.log(`\n🔐 KODE PAIRING: ${code}`);
-                    console.log(`📲 Buka WhatsApp → Perangkat Tertaut → Tautkan Perangkat → Masukkan kode: ${code}\n`);
-                } catch (error) {
-                    console.log(`❌ Gagal request pairing code: ${error.message}`);
-                    console.log('🔄 Coba lagi dalam 10 detik...');
-                    pairingStarted = false;
-                    setTimeout(() => startBot(), 10000);
-                }
+                console.log('❌ Logout, scan ulang QR!');
             }
         }
     });
