@@ -9,16 +9,26 @@ const ytdl = require('ytdl-core');
 const moment = require('moment');
 const { exec } = require('child_process');
 const path = require('path');
+const readline = require('readline');
 
 // === KONFIGURASI BELLIALL (DARI .ENV) ===
+const OWNER_NAME = process.env.OWNER_NAME || 'HELL';
 const OWNER_NUMBER = process.env.OWNER_NUMBER || '6282298323211';
 const BOT_NAME = process.env.BOT_NAME || 'BELLIALL-MD';
 const PREFIX = process.env.PREFIX || '.';
-const SESSION_ID = process.env.SESSION_ID || '';
+const PHONE_NUMBER = process.env.PHONE_NUMBER || '6282298323211';
 
 // === VARIABLE GLOBAL ===
 let isPublic = true;
 let welcomeEnabled = false;
+
+// === FUNGSI INPUT DARI TERMINAL ===
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
+
+const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 
 // === FUNGSI UTAMA ===
 async function startBot() {
@@ -27,23 +37,46 @@ async function startBot() {
     const socket = makeWASocket({
         logger: pino({ level: 'silent' }),
         auth: state,
-        printQRInTerminal: true,
         browser: ['BELLIALL-MD', 'Chrome', '2.0.0']
     });
 
-    // === EVENT CONNECTION ===
-    socket.ev.on('connection.update', (update) => {
+    // === PAIRING CODE ===
+    socket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
-        if (connection === 'close') {
+        
+        if (connection === 'open') {
+            console.log(`✅ ${BOT_NAME} aktif siap membantu!`);
+            rl.close();
+        } else if (connection === 'close') {
             const shouldReconnect = (lastDisconnect.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
             if (shouldReconnect) {
                 console.log('🔄 Reconnecting...');
                 startBot();
             } else {
-                console.log('❌ Logout, scan ulang QR!');
+                console.log('❌ Logout, scan ulang!');
             }
-        } else if (connection === 'open') {
-            console.log(`✅ ${BOT_NAME} aktif siap membantu!`);
+        } else if (connection === 'connecting') {
+            console.log('⏳ Menghubungkan ke WhatsApp...');
+            
+            let phoneNumber = PHONE_NUMBER;
+            if (!phoneNumber) {
+                phoneNumber = await question('\n📱 Masukkan nomor WhatsApp bot (contoh: 6282298323211): ');
+            }
+            
+            if (!phoneNumber) {
+                console.log('❌ Nomor tidak boleh kosong!');
+                process.exit(1);
+            }
+            
+            try {
+                const code = await socket.requestPairingCode(phoneNumber);
+                console.log(`\n🔐 KODE PAIRING: ${code}`);
+                console.log(`📲 Buka WhatsApp → Perangkat Tertaut → Tautkan Perangkat → Masukkan kode: ${code}\n`);
+            } catch (error) {
+                console.log(`❌ Gagal request pairing code: ${error.message}`);
+                console.log('🔄 Coba lagi dalam 5 detik...');
+                setTimeout(() => startBot(), 5000);
+            }
         }
     });
 
@@ -93,7 +126,7 @@ async function startBot() {
             const menuText = `╔═══ *${BOT_NAME}* ═══╗
 ║ 🤖 *Bot WhatsApp BELLIALL*
 ║ 📌 *Prefix:* ${PREFIX}
-║ 👑 *Owner:* ${OWNER_NUMBER}
+║ 👑 *Owner:* ${OWNER_NAME} (${OWNER_NUMBER})
 ╠══════════════════╣
 ║ 🔥 *FITUR UTAMA*
 ║ ${PREFIX}menu - Tampilkan menu
@@ -121,7 +154,7 @@ async function startBot() {
         // ----- OWNER -----
         else if (command === 'owner') {
             const ownerText = `👑 *Owner Bot BELLIALL*
-📌 Nama: Palz
+📌 Nama: ${OWNER_NAME}
 📞 Nomor: wa.me/${OWNER_NUMBER}
 🎯 Role: Master & Creator
 ⚡ Bot: ${BOT_NAME}`;
@@ -280,11 +313,14 @@ async function startBot() {
         }
     });
 
-    console.log(`🔥 ${BOT_NAME} by Palz-Coder siap digunakan!`);
+    console.log(`🔥 ${BOT_NAME} by ${OWNER_NAME} siap digunakan!`);
 }
 
 // === JALANKAN BOT ===
-startBot().catch((err) => console.log('❌ Error fatal:', err));
+startBot().catch((err) => {
+    console.log('❌ Error fatal:', err);
+    process.exit(1);
+});
 
 // === HANDLE UNCAUGHT EXCEPTION ===
 process.on('uncaughtException', (err) => {
