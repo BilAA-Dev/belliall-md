@@ -5,18 +5,16 @@ const pino = require('pino');
 const fs = require('fs-extra');
 const ytdl = require('ytdl-core');
 const path = require('path');
+const qrTerminal = require('qrcode-terminal');
 
 // === KONFIGURASI ===
-const OWNER_NAME = 'HELL';
-const OWNER_NUMBER = '6282298323211';
-const BOT_NAME = 'BELLIALL-MD';
-const PREFIX = '.';
+const OWNER_NAME = process.env.OWNER_NAME || 'HELL';
+const OWNER_NUMBER = process.env.OWNER_NUMBER || '6282298323211';
+const BOT_NAME = process.env.BOT_NAME || 'BELLIALL-MD';
+const PREFIX = process.env.PREFIX || '.';
 
 let welcomeEnabled = false;
 let qrDisplayed = false;
-
-// === FUNGSI DELAY ===
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // === START BOT ===
 async function startBot() {
@@ -25,21 +23,17 @@ async function startBot() {
     const socket = makeWASocket({
         logger: pino({ level: 'silent' }),
         auth: state,
-        browser: ['Ubuntu', 'Chrome', '120.0.0.0'], // GANTI BROWSER
-        version: [2, 3000, 1015901307], // VERSI PALING STABIL
-        connectTimeoutMs: 60000, // TIMEOUT 60 DETIK
-        defaultQueryTimeoutMs: 60000
+        browser: ['Ubuntu', 'Chrome', '120.0.0.0']
     });
 
     socket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
-        // === QR CODE (PASTI MUNCUL) ===
         if (qr && !qrDisplayed) {
             qrDisplayed = true;
-            console.log('\n📱 SCAN QR INI:');
-            console.log(`👉 https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`);
-            console.log('\n📌 COPY LINK DI ATAS, BUKA DI BROWSER HP, SCAN QR DARI LAYAR.\n');
+            console.log('\n📱 SCAN QR CODE INI DENGAN WHATSAPP:\n');
+            qrTerminal.generate(qr, { small: true });
+            console.log('\n⚠️ Atau scan lewat: WhatsApp → Perangkat Tertaut → Tautkan Perangkat\n');
         }
 
         if (connection === 'open') {
@@ -48,18 +42,11 @@ async function startBot() {
         } else if (connection === 'close') {
             qrDisplayed = false;
             const statusCode = (lastDisconnect.error instanceof Boom)?.output?.statusCode;
-            
-            // KALO KENA LIMIT, TUNGGU 30 DETIK
-            if (statusCode === 405 || statusCode === 403) {
-                console.log('⏳ Kena limit, tunggu 30 detik...');
-                await delay(30000);
-            }
-            
             if (statusCode !== DisconnectReason.loggedOut) {
                 console.log('🔄 Restart...');
                 startBot();
             } else {
-                console.log('❌ Logout, hapus auth_info!');
+                console.log('❌ Logout, hapus folder auth_info!');
             }
         }
     });
@@ -73,7 +60,7 @@ async function startBot() {
         if (action === 'add') {
             for (let user of participants) {
                 await socket.sendMessage(id, { 
-                    text: `👋 Selamat datang @${user.split('@')[0]}!`, 
+                    text: `👋 Selamat datang @${user.split('@')[0]} di grup!\n📌 Baca deskripsi grup ya!`, 
                     mentions: [user] 
                 });
             }
@@ -87,9 +74,11 @@ async function startBot() {
 
         const sender = msg.key.remoteJid;
         const isGroup = sender.endsWith('@g.us');
+        const senderName = msg.pushName || 'User';
         const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
         const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage || null;
 
+        // === AUTO-REPLY ===
         if (!text.startsWith(PREFIX)) {
             if (text.toLowerCase().includes('assalamualaikum')) {
                 await socket.sendMessage(sender, { text: 'Wa\'alaikumsalam warahmatullahi wabarakatuh 🌙' });
@@ -101,29 +90,37 @@ async function startBot() {
         const command = args.shift().toLowerCase();
         const fullArgs = args.join(' ');
 
+        console.log(`📩 [${senderName}] ${command} ${fullArgs}`);
+
         // === MENU ===
         if (command === 'menu' || command === 'help') {
-            await socket.sendMessage(sender, { text: `╔═══ *${BOT_NAME}* ═══╗
-║ 🤖 BELLIALL-MD
-║ 📌 Prefix: ${PREFIX}
-║ 👑 Owner: ${OWNER_NAME}
+            const menuText = `╔═══ *${BOT_NAME}* ═══╗
+║ 🤖 *Bot WhatsApp BELLIALL*
+║ 📌 *Prefix:* ${PREFIX}
+║ 👑 *Owner:* ${OWNER_NAME} (${OWNER_NUMBER})
 ╠══════════════════╣
-║ ${PREFIX}menu - Menu
-║ ${PREFIX}owner - Owner
-║ ${PREFIX}ping - Ping
-║ ${PREFIX}runtime - Runtime
-║ ${PREFIX}stiker - Stiker
-║ ${PREFIX}stikergif - Stiker GIF
-║ ${PREFIX}ytmp3 <url> - Audio
-║ ${PREFIX}ytmp4 <url> - Video
-║ ${PREFIX}welcome on/off - Welcome
-║ ${PREFIX}clearall - Clear chat
-╚══════════════════╝` });
+║ 🔥 *FITUR UTAMA*
+║ ${PREFIX}menu - Tampilkan menu
+║ ${PREFIX}owner - Info owner
+║ ${PREFIX}ping - Cek status bot
+║ ${PREFIX}runtime - Lama bot aktif
+║ ${PREFIX}stiker - Buat stiker (balas gambar)
+║ ${PREFIX}stikergif - Buat stiker GIF (balas video)
+║ ${PREFIX}ytmp3 <url> - Download audio YT
+║ ${PREFIX}ytmp4 <url> - Download video YT
+║ ${PREFIX}welcome on/off - Welcome member
+║ ${PREFIX}clearall - Hapus chat (owner)
+╠══════════════════╣
+║ 💀 *BELLIALL - 2026*
+╚══════════════════╝`;
+            await socket.sendMessage(sender, { text: menuText });
         }
 
         // === OWNER ===
         else if (command === 'owner') {
-            await socket.sendMessage(sender, { text: `👑 *Owner*\nNama: ${OWNER_NAME}\nwa.me/${OWNER_NUMBER}` });
+            await socket.sendMessage(sender, { 
+                text: `👑 *Owner Bot*\n📌 Nama: ${OWNER_NAME}\n📞 wa.me/${OWNER_NUMBER}` 
+            });
         }
 
         // === PING ===
@@ -140,98 +137,132 @@ async function startBot() {
             const hours = Math.floor(uptime / 3600);
             const minutes = Math.floor((uptime % 3600) / 60);
             const seconds = Math.floor(uptime % 60);
-            await socket.sendMessage(sender, { text: `⏰ ${hours}j ${minutes}m ${seconds}d` });
+            await socket.sendMessage(sender, { 
+                text: `⏰ Bot aktif selama: ${hours} jam ${minutes} menit ${seconds} detik` 
+            });
         }
 
-        // === STIKER ===
+        // === STIKER (Gambar) ===
         else if (command === 'stiker' || command === 'sticker') {
             if (!quoted || !quoted.imageMessage) {
-                return socket.sendMessage(sender, { text: '❌ Balas gambar!' });
+                return socket.sendMessage(sender, { text: '❌ Balas gambar dengan perintah .stiker' });
             }
             try {
-                const media = await downloadMediaMessage(quoted, 'buffer', {}, { reuploadRequest: socket.updateMediaMessage });
-                await socket.sendMessage(sender, { sticker: media, mimetype: 'image/webp' });
+                const media = await downloadMediaMessage(quoted, 'buffer', {}, { 
+                    reuploadRequest: socket.updateMediaMessage 
+                });
+                await socket.sendMessage(sender, { 
+                    sticker: media, 
+                    mimetype: 'image/webp' 
+                });
             } catch (e) {
-                socket.sendMessage(sender, { text: `❌ ${e.message}` });
+                socket.sendMessage(sender, { text: `❌ Gagal: ${e.message}` });
             }
         }
 
         // === STIKER GIF ===
-        else if (command === 'stikergif') {
+        else if (command === 'stikergif' || command === 'stickergif') {
             if (!quoted || !quoted.videoMessage) {
-                return socket.sendMessage(sender, { text: '❌ Balas video!' });
+                return socket.sendMessage(sender, { text: '❌ Balas video dengan perintah .stikergif' });
             }
             try {
-                const media = await downloadMediaMessage(quoted, 'buffer', {}, { reuploadRequest: socket.updateMediaMessage });
-                await socket.sendMessage(sender, { sticker: media, mimetype: 'video/webp' });
+                const media = await downloadMediaMessage(quoted, 'buffer', {}, {
+                    reuploadRequest: socket.updateMediaMessage
+                });
+                await socket.sendMessage(sender, {
+                    sticker: media,
+                    mimetype: 'video/webp'
+                });
             } catch (e) {
-                socket.sendMessage(sender, { text: `❌ ${e.message}` });
+                socket.sendMessage(sender, { text: `❌ Gagal: ${e.message}` });
             }
         }
 
         // === YTMP3 ===
         else if (command === 'ytmp3') {
-            if (!fullArgs) return socket.sendMessage(sender, { text: '❌ Masukkan URL YouTube' });
+            if (!fullArgs) return socket.sendMessage(sender, { text: '❌ Masukkan URL YouTube. Contoh: .ytmp3 https://youtu.be/xxx' });
             try {
-                await socket.sendMessage(sender, { text: '⏳ Downloading...' });
+                await socket.sendMessage(sender, { text: '⏳ Mengunduh audio, tunggu sebentar...' });
                 const info = await ytdl.getInfo(fullArgs);
                 const title = info.videoDetails.title;
-                const stream = ytdl(fullArgs, { quality: 'highestaudio', filter: 'audioonly' });
+                const audioStream = ytdl(fullArgs, { quality: 'highestaudio', filter: 'audioonly' });
                 const filePath = path.join(__dirname, `audio_${Date.now()}.mp3`);
                 const writeStream = fs.createWriteStream(filePath);
-                stream.pipe(writeStream);
+                audioStream.pipe(writeStream);
                 await new Promise(resolve => writeStream.on('finish', resolve));
-                await socket.sendMessage(sender, { audio: fs.readFileSync(filePath), mimetype: 'audio/mp4', fileName: `${title}.mp3` });
+                await socket.sendMessage(sender, { 
+                    audio: fs.readFileSync(filePath), 
+                    mimetype: 'audio/mp4', 
+                    fileName: `${title}.mp3` 
+                });
                 fs.unlinkSync(filePath);
             } catch (e) {
-                socket.sendMessage(sender, { text: `❌ ${e.message}` });
+                socket.sendMessage(sender, { text: `❌ Error: ${e.message}` });
             }
         }
 
         // === YTMP4 ===
         else if (command === 'ytmp4') {
-            if (!fullArgs) return socket.sendMessage(sender, { text: '❌ Masukkan URL YouTube' });
+            if (!fullArgs) return socket.sendMessage(sender, { text: '❌ Masukkan URL YouTube. Contoh: .ytmp4 https://youtu.be/xxx' });
             try {
-                await socket.sendMessage(sender, { text: '⏳ Downloading...' });
+                await socket.sendMessage(sender, { text: '⏳ Mengunduh video, tunggu...' });
                 const info = await ytdl.getInfo(fullArgs);
                 const title = info.videoDetails.title;
-                const stream = ytdl(fullArgs, { quality: 'lowest' });
+                const videoStream = ytdl(fullArgs, { quality: 'lowest' });
                 const filePath = path.join(__dirname, `video_${Date.now()}.mp4`);
                 const writeStream = fs.createWriteStream(filePath);
-                stream.pipe(writeStream);
+                videoStream.pipe(writeStream);
                 await new Promise(resolve => writeStream.on('finish', resolve));
-                await socket.sendMessage(sender, { video: fs.readFileSync(filePath), caption: `🎬 ${title}`, fileName: `${title}.mp4`, mimetype: 'video/mp4' });
+                await socket.sendMessage(sender, {
+                    video: fs.readFileSync(filePath),
+                    caption: `🎬 ${title}`,
+                    fileName: `${title}.mp4`,
+                    mimetype: 'video/mp4'
+                });
                 fs.unlinkSync(filePath);
             } catch (e) {
-                socket.sendMessage(sender, { text: `❌ ${e.message}` });
+                socket.sendMessage(sender, { text: `❌ Error: ${e.message}` });
             }
         }
 
         // === WELCOME ===
         else if (command === 'welcome') {
-            if (!isGroup) return socket.sendMessage(sender, { text: '❌ Grup only!' });
+            if (!isGroup) return socket.sendMessage(sender, { text: '❌ Ini hanya untuk grup!' });
             const setting = fullArgs.toLowerCase();
-            if (setting === 'on') { welcomeEnabled = true; socket.sendMessage(sender, { text: '✅ Welcome ON' }); }
-            else if (setting === 'off') { welcomeEnabled = false; socket.sendMessage(sender, { text: '❌ Welcome OFF' }); }
-            else { socket.sendMessage(sender, { text: `⚠️ .welcome on/off (${welcomeEnabled ? 'ON' : 'OFF'})` }); }
+            if (setting === 'on') {
+                welcomeEnabled = true;
+                socket.sendMessage(sender, { text: '✅ Welcome message diaktifkan!' });
+            } else if (setting === 'off') {
+                welcomeEnabled = false;
+                socket.sendMessage(sender, { text: '❌ Welcome message dinonaktifkan!' });
+            } else {
+                socket.sendMessage(sender, { 
+                    text: `⚠️ Gunakan .welcome on/off. Saat ini: ${welcomeEnabled ? 'ON' : 'OFF'}` 
+                });
+            }
         }
 
         // === CLEARALL ===
         else if (command === 'clearall') {
-            if (sender !== `${OWNER_NUMBER}@s.whatsapp.net`) return socket.sendMessage(sender, { text: '❌ Owner only!' });
+            if (sender !== `${OWNER_NUMBER}@s.whatsapp.net`) {
+                return socket.sendMessage(sender, { text: '❌ Khusus owner!' });
+            }
             try {
                 const chats = await socket.groupFetchAllParticipating();
                 for (let chat in chats) {
-                    await socket.sendMessage(chat, { text: '🧹 Clear...' });
+                    await socket.sendMessage(chat, { text: '🧹 Bot akan clear chat...' });
                 }
-                socket.sendMessage(sender, { text: '✅ Cleared!' });
+                socket.sendMessage(sender, { text: '✅ Semua chat dibersihkan!' });
             } catch (e) {
-                socket.sendMessage(sender, { text: `❌ ${e.message}` });
+                socket.sendMessage(sender, { text: `❌ Gagal: ${e.message}` });
             }
         }
 
+        // === DEFAULT ===
         else {
-            await socket.sendMessage(sender, { text: `❌ .menu` });
+            await socket.sendMessage(sender, { 
+                text: `❌ Perintah "${command}" tidak dikenal.\nKetik .menu untuk lihat daftar perintah.` 
+            });
         }
     });
 
@@ -240,6 +271,11 @@ async function startBot() {
 
 // === JALANKAN ===
 startBot().catch(err => {
-    console.error('❌ Error:', err);
+    console.error('❌ Fatal Error:', err);
     process.exit(1);
+});
+
+// === UNCAUGHT EXCEPTION ===
+process.on('uncaughtException', (err) => {
+    console.log('⚠️ Uncaught Exception:', err);
 });
