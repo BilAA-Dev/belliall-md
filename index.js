@@ -3,27 +3,19 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, download
 const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const fs = require('fs-extra');
-const fetch = require('node-fetch');
-const axios = require('axios');
-const ytdl = require('ytdl-core');
-const moment = require('moment');
 const path = require('path');
 
-// === KONFIGURASI BELLIALL (DARI .ENV) ===
+// === KONFIGURASI ===
 const OWNER_NAME = process.env.OWNER_NAME || 'HELL';
 const OWNER_NUMBER = process.env.OWNER_NUMBER || '6282298323211';
 const BOT_NAME = process.env.BOT_NAME || 'BELLIALL-MD';
 const PREFIX = process.env.PREFIX || '.';
 const PHONE_NUMBER = process.env.PHONE_NUMBER || '6282298323211';
 
-// === VARIABLE GLOBAL ===
 let isPublic = true;
 let welcomeEnabled = false;
 let pairingStarted = false;
-let retryCount = 0;
-const MAX_RETRIES = 3;
 
-// === FUNGSI UTAMA ===
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
     
@@ -33,292 +25,58 @@ async function startBot() {
         browser: ['BELLIALL-MD', 'Chrome', '2.0.0']
     });
 
-    // === PAIRING CODE ===
     socket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
         
         if (connection === 'open') {
-            console.log(`✅ ${BOT_NAME} aktif siap membantu!`);
+            console.log(`✅ ${BOT_NAME} AKTIF!`);
             pairingStarted = false;
-            retryCount = 0;
         } else if (connection === 'close') {
-            pairingStarted = false;
-            const shouldReconnect = (lastDisconnect.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-            if (shouldReconnect) {
+            const statusCode = (lastDisconnect.error instanceof Boom)?.output?.statusCode;
+            if (statusCode !== DisconnectReason.loggedOut) {
                 console.log('🔄 Reconnecting...');
                 startBot();
             } else {
-                console.log('❌ Logout, pairing ulang!');
+                console.log('❌ Logout, ulangi proses.');
             }
         } else if (connection === 'connecting') {
-            if (!pairingStarted && retryCount < MAX_RETRIES) {
+            if (!pairingStarted) {
                 pairingStarted = true;
-                retryCount++;
-                console.log(`⏳ Menghubungkan ke WhatsApp... (Percobaan ${retryCount}/${MAX_RETRIES})`);
-                console.log(`📱 Menggunakan nomor: ${PHONE_NUMBER}`);
-                
+                console.log(`⏳ Mencoba pairing untuk nomor: ${PHONE_NUMBER}`);
                 try {
                     const code = await socket.requestPairingCode(PHONE_NUMBER);
                     console.log(`\n🔐 KODE PAIRING: ${code}`);
-                    console.log(`📲 Buka WhatsApp → Perangkat Tertaut → Tautkan Perangkat → Masukkan kode: ${code}\n`);
-                    console.log(`⏳ Tunggu 30 detik... Kode berlaku 2 menit.\n`);
+                    console.log(`📲 Buka WhatsApp -> Perangkat Tertaut -> Tautkan Perangkat -> Masukkan kode: ${code}\n`);
                 } catch (error) {
-                    console.log(`❌ Gagal request pairing code: ${error.message}`);
-                    console.log(`💡 Pastikan nomor ${PHONE_NUMBER} aktif dan terinstal WhatsApp.`);
-                    console.log('🔄 Coba lagi dalam 10 detik...');
+                    console.error(`❌ Error: ${error.message}`);
+                    console.log('🔄 Coba ulang dalam 15 detik...');
                     pairingStarted = false;
-                    setTimeout(() => startBot(), 10000);
+                    setTimeout(startBot, 15000);
                 }
-            } else if (retryCount >= MAX_RETRIES) {
-                console.log('❌ Gagal 3 kali berturut-turut. Coba restart manual.');
-                process.exit(1);
             }
         }
     });
 
     socket.ev.on('creds.update', saveCreds);
 
-    // === EVENT GROUP PARTICIPANT ===
-    socket.ev.on('group-participants.update', async (update) => {
-        if (!welcomeEnabled) return;
-        const { id, participants, action } = update;
-        if (action === 'add') {
-            for (let user of participants) {
-                const welcomeMsg = `👋 Selamat datang @${user.split('@')[0]} di grup ${id}\n\n📌 Baca deskripsi grup ya!`;
-                await socket.sendMessage(id, { text: welcomeMsg, mentions: [user] });
-            }
-        }
-    });
-
-    // === EVENT PESAN MASUK ===
+    // === EVENT PESAN ===
     socket.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
         if (!msg.message || msg.key.fromMe) return;
 
         const sender = msg.key.remoteJid;
-        const isGroup = sender.endsWith('@g.us');
-        const senderName = msg.pushName || 'User';
         const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
-        const quoted = msg.message.extendedTextMessage?.contextInfo?.quotedMessage || null;
-
-        // === AUTO-REPLY (tanpa prefix) ===
-        if (!text.startsWith(PREFIX)) {
-            if (text.toLowerCase().includes('assalamualaikum')) {
-                await socket.sendMessage(sender, { text: 'Wa\'alaikumsalam warahmatullahi wabarakatuh 🌙' });
-            }
-            return;
-        }
-
-        const args = text.slice(PREFIX.length).trim().split(/\s+/);
-        const command = args.shift().toLowerCase();
-        const fullArgs = args.join(' ');
-
-        console.log(`📩 [${senderName}] ${command} ${fullArgs}`);
-
-        // === FITUR-FITUR BELLIALL ===
-
-        // ----- MENU -----
-        if (command === 'menu' || command === 'help') {
-            const menuText = `╔═══ *${BOT_NAME}* ═══╗
-║ 🤖 *Bot WhatsApp BELLIALL*
-║ 📌 *Prefix:* ${PREFIX}
-║ 👑 *Owner:* ${OWNER_NAME} (${OWNER_NUMBER})
-╠══════════════════╣
-║ 🔥 *FITUR UTAMA*
-║ ${PREFIX}menu - Tampilkan menu
-║ ${PREFIX}owner - Info owner
-║ ${PREFIX}ping - Cek status bot
-║ ${PREFIX}runtime - Lama bot aktif
-║
-║ 🛠️ *FITUR MEDIA*
-║ ${PREFIX}stiker - Buat stiker (balas gambar)
-║ ${PREFIX}stikergif - Buat stiker GIF (balas video)
-║ ${PREFIX}ytmp3 <url> - Download audio YT
-║ ${PREFIX}ytmp4 <url> - Download video YT
-║
-║ 🎮 *FITUR LAIN*
-║ ${PREFIX}welcome on/off - Welcome member
-║ ${PREFIX}public - Bot public
-║ ${PREFIX}private - Bot private
-║ ${PREFIX}clearall - Hapus chat (owner)
-╠══════════════════╣
-║ 💀 *BELLIALL - 2026*
-╚══════════════════╝`;
-            await socket.sendMessage(sender, { text: menuText });
-        }
-
-        // ----- OWNER -----
-        else if (command === 'owner') {
-            const ownerText = `👑 *Owner Bot BELLIALL*
-📌 Nama: ${OWNER_NAME}
-📞 Nomor: wa.me/${OWNER_NUMBER}
-🎯 Role: Master & Creator
-⚡ Bot: ${BOT_NAME}`;
-            await socket.sendMessage(sender, { text: ownerText });
-        }
-
-        // ----- PING -----
-        else if (command === 'ping') {
-            const start = Date.now();
-            await socket.sendMessage(sender, { text: '⏳ Pinging...' });
-            const end = Date.now();
-            await socket.sendMessage(sender, { text: `🏓 Pong! ${end - start}ms ✅` });
-        }
-
-        // ----- RUNTIME -----
-        else if (command === 'runtime') {
-            const uptime = process.uptime();
-            const hours = Math.floor(uptime / 3600);
-            const minutes = Math.floor((uptime % 3600) / 60);
-            const seconds = Math.floor(uptime % 60);
-            await socket.sendMessage(sender, { text: `⏰ Bot aktif selama: ${hours} jam ${minutes} menit ${seconds} detik` });
-        }
-
-        // ----- STIKER (Gambar) -----
-        else if (command === 'stiker' || command === 'sticker') {
-            if (!quoted || !quoted.imageMessage) {
-                return socket.sendMessage(sender, { text: '❌ Balas gambar dengan perintah .stiker' });
-            }
-            try {
-                const media = await downloadMediaMessage(quoted, 'buffer', {}, { 
-                    logger: pino({ level: 'silent' }),
-                    reuploadRequest: socket.updateMediaMessage
-                });
-                await socket.sendMessage(sender, { 
-                    sticker: media,
-                    mimetype: 'image/webp'
-                });
-            } catch (e) {
-                socket.sendMessage(sender, { text: `❌ Gagal buat stiker: ${e.message}` });
-            }
-        }
-
-        // ----- STIKER GIF -----
-        else if (command === 'stikergif' || command === 'stickergif') {
-            if (!quoted || !quoted.videoMessage) {
-                return socket.sendMessage(sender, { text: '❌ Balas video dengan perintah .stikergif' });
-            }
-            try {
-                const media = await downloadMediaMessage(quoted, 'buffer', {}, {
-                    logger: pino({ level: 'silent' }),
-                    reuploadRequest: socket.updateMediaMessage
-                });
-                await socket.sendMessage(sender, {
-                    sticker: media,
-                    mimetype: 'video/webp'
-                });
-            } catch (e) {
-                socket.sendMessage(sender, { text: `❌ Gagal: ${e.message}` });
-            }
-        }
-
-        // ----- DOWNLOAD YTMP3 -----
-        else if (command === 'ytmp3') {
-            if (!fullArgs) return socket.sendMessage(sender, { text: '❌ Masukkan URL YouTube. Contoh: .ytmp3 https://youtu.be/xxx' });
-            try {
-                await socket.sendMessage(sender, { text: '⏳ Mengunduh audio, tunggu sebentar...' });
-                const info = await ytdl.getInfo(fullArgs);
-                const title = info.videoDetails.title;
-                const audioStream = ytdl(fullArgs, { quality: 'highestaudio', filter: 'audioonly' });
-                const filePath = path.join(__dirname, `audio_${Date.now()}.mp3`);
-                const writeStream = fs.createWriteStream(filePath);
-                audioStream.pipe(writeStream);
-                await new Promise((resolve) => writeStream.on('finish', resolve));
-                
-                await socket.sendMessage(sender, { 
-                    audio: fs.readFileSync(filePath),
-                    mimetype: 'audio/mp4',
-                    fileName: `${title}.mp3`
-                });
-                fs.unlinkSync(filePath);
-            } catch (e) {
-                socket.sendMessage(sender, { text: `❌ Error: ${e.message}` });
-            }
-        }
-
-        // ----- DOWNLOAD YTMP4 -----
-        else if (command === 'ytmp4') {
-            if (!fullArgs) return socket.sendMessage(sender, { text: '❌ Masukkan URL YouTube. Contoh: .ytmp4 https://youtu.be/xxx' });
-            try {
-                await socket.sendMessage(sender, { text: '⏳ Mengunduh video, tunggu...' });
-                const info = await ytdl.getInfo(fullArgs);
-                const title = info.videoDetails.title;
-                const videoStream = ytdl(fullArgs, { quality: 'lowest' });
-                const filePath = path.join(__dirname, `video_${Date.now()}.mp4`);
-                const writeStream = fs.createWriteStream(filePath);
-                videoStream.pipe(writeStream);
-                await new Promise((resolve) => writeStream.on('finish', resolve));
-                
-                await socket.sendMessage(sender, {
-                    video: fs.readFileSync(filePath),
-                    caption: `🎬 ${title}`,
-                    fileName: `${title}.mp4`,
-                    mimetype: 'video/mp4'
-                });
-                fs.unlinkSync(filePath);
-            } catch (e) {
-                socket.sendMessage(sender, { text: `❌ Error: ${e.message}` });
-            }
-        }
-
-        // ----- WELCOME ON/OFF -----
-        else if (command === 'welcome') {
-            if (!isGroup) return socket.sendMessage(sender, { text: '❌ Ini hanya untuk grup!' });
-            const setting = fullArgs.toLowerCase();
-            if (setting === 'on') {
-                welcomeEnabled = true;
-                socket.sendMessage(sender, { text: '✅ Welcome message diaktifkan!' });
-            } else if (setting === 'off') {
-                welcomeEnabled = false;
-                socket.sendMessage(sender, { text: '❌ Welcome message dinonaktifkan!' });
-            } else {
-                socket.sendMessage(sender, { text: `⚠️ Gunakan .welcome on/off. Saat ini: ${welcomeEnabled ? 'ON' : 'OFF'}` });
-            }
-        }
-
-        // ----- PUBLIC/PRIVATE -----
-        else if (command === 'public') {
-            if (sender !== `${OWNER_NUMBER}@s.whatsapp.net`) return socket.sendMessage(sender, { text: '❌ Khusus owner!' });
-            isPublic = true;
-            socket.sendMessage(sender, { text: '🌍 Bot mode PUBLIC' });
-        } else if (command === 'private') {
-            if (sender !== `${OWNER_NUMBER}@s.whatsapp.net`) return socket.sendMessage(sender, { text: '❌ Khusus owner!' });
-            isPublic = false;
-            socket.sendMessage(sender, { text: '🔒 Bot mode PRIVATE' });
-        }
-
-        // ----- CLEAR ALL (OWNER) -----
-        else if (command === 'clearall') {
-            if (sender !== `${OWNER_NUMBER}@s.whatsapp.net`) return socket.sendMessage(sender, { text: '❌ Khusus owner!' });
-            try {
-                const chats = await socket.groupFetchAllParticipating();
-                for (let chat in chats) {
-                    await socket.sendMessage(chat, { text: '🧹 Bot akan clear chat...' });
-                }
-                socket.sendMessage(sender, { text: '✅ Semua chat dibersihkan!' });
-            } catch (e) {
-                socket.sendMessage(sender, { text: `❌ Gagal: ${e.message}` });
-            }
-        }
-
-        // ----- DEFAULT (command tidak dikenal) -----
-        else {
-            await socket.sendMessage(sender, { 
-                text: `❌ Perintah "${command}" tidak dikenal.\nKetik .menu untuk lihat daftar perintah.` 
-            });
+        
+        // Auto-reply sederhana biar tau bot hidup
+        if (text === '.ping') {
+            await socket.sendMessage(sender, { text: 'Pong! 🏓' });
         }
     });
 
     console.log(`🔥 ${BOT_NAME} by ${OWNER_NAME} siap digunakan!`);
 }
 
-// === JALANKAN BOT ===
-startBot().catch((err) => {
-    console.log('❌ Error fatal:', err);
+startBot().catch(err => {
+    console.error('❌ Fatal Error:', err);
     process.exit(1);
-});
-
-// === HANDLE UNCAUGHT EXCEPTION ===
-process.on('uncaughtException', (err) => {
-    console.log('⚠️ Uncaught Exception:', err);
 });
