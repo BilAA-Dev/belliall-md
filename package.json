@@ -1,7 +1,7 @@
 {
   "name": "belliall-md",
   "version": "3.0.0",
-  "description": "Bot WhatsApp BELLIALL by HELL - Full Fitur",
+  "description": "Bot WhatsApp BELLIALL by HELL",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
