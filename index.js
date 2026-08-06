@@ -20,6 +20,8 @@ const PHONE_NUMBER = process.env.PHONE_NUMBER || '6282298323211';
 let isPublic = true;
 let welcomeEnabled = false;
 let pairingStarted = false;
+let retryCount = 0;
+const MAX_RETRIES = 3;
 
 // === FUNGSI UTAMA ===
 async function startBot() {
@@ -31,32 +33,14 @@ async function startBot() {
         browser: ['BELLIALL-MD', 'Chrome', '2.0.0']
     });
 
-    // === QR CODE + PAIRING ===
+    // === PAIRING CODE ===
     socket.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect, qr } = update;
+        const { connection, lastDisconnect } = update;
         
-        // TAMPILIN QR LINK
-        if (qr) {
-            console.log('\n📱 SCAN QR CODE DENGAN WHATSAPP:');
-            console.log(`🔗 LINK QR: https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`);
-            console.log('\n📲 Atau buka link di browser, lalu scan QR dari layar HP.\n');
-            
-            // Pairing code sebagai backup
-            if (!pairingStarted) {
-                pairingStarted = true;
-                try {
-                    const code = await socket.requestPairingCode(PHONE_NUMBER);
-                    console.log(`🔐 ATAU PAKAI PAIRING CODE: ${code}`);
-                    console.log(`📲 Buka WhatsApp → Perangkat Tertaut → Tautkan Perangkat → Masukkan kode: ${code}\n`);
-                } catch (e) {
-                    console.log('⚠️ Pairing code gagal, scan QR aja.\n');
-                }
-            }
-        }
-
         if (connection === 'open') {
             console.log(`✅ ${BOT_NAME} aktif siap membantu!`);
             pairingStarted = false;
+            retryCount = 0;
         } else if (connection === 'close') {
             pairingStarted = false;
             const shouldReconnect = (lastDisconnect.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
@@ -64,7 +48,30 @@ async function startBot() {
                 console.log('🔄 Reconnecting...');
                 startBot();
             } else {
-                console.log('❌ Logout, scan ulang!');
+                console.log('❌ Logout, pairing ulang!');
+            }
+        } else if (connection === 'connecting') {
+            if (!pairingStarted && retryCount < MAX_RETRIES) {
+                pairingStarted = true;
+                retryCount++;
+                console.log(`⏳ Menghubungkan ke WhatsApp... (Percobaan ${retryCount}/${MAX_RETRIES})`);
+                console.log(`📱 Menggunakan nomor: ${PHONE_NUMBER}`);
+                
+                try {
+                    const code = await socket.requestPairingCode(PHONE_NUMBER);
+                    console.log(`\n🔐 KODE PAIRING: ${code}`);
+                    console.log(`📲 Buka WhatsApp → Perangkat Tertaut → Tautkan Perangkat → Masukkan kode: ${code}\n`);
+                    console.log(`⏳ Tunggu 30 detik... Kode berlaku 2 menit.\n`);
+                } catch (error) {
+                    console.log(`❌ Gagal request pairing code: ${error.message}`);
+                    console.log(`💡 Pastikan nomor ${PHONE_NUMBER} aktif dan terinstal WhatsApp.`);
+                    console.log('🔄 Coba lagi dalam 10 detik...');
+                    pairingStarted = false;
+                    setTimeout(() => startBot(), 10000);
+                }
+            } else if (retryCount >= MAX_RETRIES) {
+                console.log('❌ Gagal 3 kali berturut-turut. Coba restart manual.');
+                process.exit(1);
             }
         }
     });
