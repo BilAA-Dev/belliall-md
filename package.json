@@ -1,0 +1,20 @@
+{
+  "name": "belliall-md",
+  "version": "2.0.0",
+  "description": "Bot WhatsApp BELLIALL by Belliall",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.6.0",
+    "qrcode-terminal": "^0.12.0",
+    "pino": "^8.0.0",
+    "node-fetch": "^3.3.1",
+    "axios": "^1.6.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "ytdl-core": "^4.11.5",
+    "moment": "^2.29.4",
+    "fs-extra": "^11.1.1"
+  }
+}
