@@ -1,7 +1,7 @@
 {
   "name": "belliall-md",
   "version": "2.0.0",
-  "description": "Bot WhatsApp BELLIALL by Belliall",
+  "description": "Bot WhatsApp BELLIALL by BELLIALL",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -15,6 +15,7 @@
     "fluent-ffmpeg": "^2.1.2",
     "ytdl-core": "^4.11.5",
     "moment": "^2.29.4",
-    "fs-extra": "^11.1.1"
+    "fs-extra": "^11.1.1",
+    "dotenv": "^16.0.3"
   }
 }
