@@ -9,7 +9,6 @@ const ytdl = require('ytdl-core');
 const moment = require('moment');
 const { exec } = require('child_process');
 const path = require('path');
-const readline = require('readline');
 
 // === KONFIGURASI BELLIALL (DARI .ENV) ===
 const OWNER_NAME = process.env.OWNER_NAME || 'HELL';
@@ -21,14 +20,7 @@ const PHONE_NUMBER = process.env.PHONE_NUMBER || '6282298323211';
 // === VARIABLE GLOBAL ===
 let isPublic = true;
 let welcomeEnabled = false;
-
-// === FUNGSI INPUT DARI TERMINAL ===
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
-
-const question = (text) => new Promise((resolve) => rl.question(text, resolve));
+let pairingStarted = false;
 
 // === FUNGSI UTAMA ===
 async function startBot() {
@@ -40,42 +32,36 @@ async function startBot() {
         browser: ['BELLIALL-MD', 'Chrome', '2.0.0']
     });
 
-    // === PAIRING CODE ===
+    // === PAIRING CODE OTOMATIS ===
     socket.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
         
         if (connection === 'open') {
             console.log(`✅ ${BOT_NAME} aktif siap membantu!`);
-            rl.close();
         } else if (connection === 'close') {
             const shouldReconnect = (lastDisconnect.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
             if (shouldReconnect) {
                 console.log('🔄 Reconnecting...');
                 startBot();
             } else {
-                console.log('❌ Logout, scan ulang!');
+                console.log('❌ Logout, pairing ulang!');
             }
         } else if (connection === 'connecting') {
-            console.log('⏳ Menghubungkan ke WhatsApp...');
-            
-            let phoneNumber = PHONE_NUMBER;
-            if (!phoneNumber) {
-                phoneNumber = await question('\n📱 Masukkan nomor WhatsApp bot (contoh: 6282298323211): ');
-            }
-            
-            if (!phoneNumber) {
-                console.log('❌ Nomor tidak boleh kosong!');
-                process.exit(1);
-            }
-            
-            try {
-                const code = await socket.requestPairingCode(phoneNumber);
-                console.log(`\n🔐 KODE PAIRING: ${code}`);
-                console.log(`📲 Buka WhatsApp → Perangkat Tertaut → Tautkan Perangkat → Masukkan kode: ${code}\n`);
-            } catch (error) {
-                console.log(`❌ Gagal request pairing code: ${error.message}`);
-                console.log('🔄 Coba lagi dalam 5 detik...');
-                setTimeout(() => startBot(), 5000);
+            if (!pairingStarted) {
+                pairingStarted = true;
+                console.log('⏳ Menghubungkan ke WhatsApp...');
+                console.log(`📱 Menggunakan nomor: ${PHONE_NUMBER}`);
+                
+                try {
+                    const code = await socket.requestPairingCode(PHONE_NUMBER);
+                    console.log(`\n🔐 KODE PAIRING: ${code}`);
+                    console.log(`📲 Buka WhatsApp → Perangkat Tertaut → Tautkan Perangkat → Masukkan kode: ${code}\n`);
+                } catch (error) {
+                    console.log(`❌ Gagal request pairing code: ${error.message}`);
+                    console.log('🔄 Coba lagi dalam 10 detik...');
+                    pairingStarted = false;
+                    setTimeout(() => startBot(), 10000);
+                }
             }
         }
     });
